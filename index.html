@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>JNTUH Campus Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; }
+    #map { width: 100%; height: 100vh; }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Initialize map centered at JNTUH
+    const map = L.map('map').setView([17.4955, 78.3938], 17);
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+
+    // Load your walkable paths
+fetch('paths_in_jntuh.geojson')
+  .then(res => res.json())
+  .then(data => {
+    console.log("GeoJSON loaded:", data);  // ✅ Check if data loads
+    L.geoJSON(data, {
+      style: {
+        color: 'red',
+        weight: 3
+      }
+    }).addTo(map);
+  })
+  .catch(err => console.error("GeoJSON load error:", err));
+
+  </script>
+
+</body>
+</html>
