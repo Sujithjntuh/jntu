@@ -19,30 +19,68 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // Initialize map centered at JNTUH
-    const map = L.map('map').setView([17.4955, 78.3938], 17);
+  // 1️⃣ Initialize the map
+  const map = L.map('map').setView([17.4955, 78.3938], 17);
 
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+  // 2️⃣ Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
 
+  // 3️⃣ Load and style your GeoJSON paths
+  fetch('https://sujithjntuh.github.io/jntuh-campus-map/paths_in_jntuh.geojson')
+    .then(res => res.json())
+    .then(data => {
+      L.geoJSON(data, {
+        style: {
+          color: 'red',
+          weight: 3
+        }
+      }).addTo(map);
+    });
 
-    // Load your walkable paths
-fetch('paths_in_jntuh.geojson')
-  .then(res => res.json())
-  .then(data => {
-    console.log("GeoJSON loaded:", data);  // ✅ Check if data loads
-    L.geoJSON(data, {
-      style: {
-        color: 'red',
-        weight: 3
-      }
-    }).addTo(map);
-  })
-  .catch(err => console.error("GeoJSON load error:", err));
+  // 🔵🔘 4️⃣ User + Destination Marker Code starts here
+  let userMarker = null;
+  let destMarker = null;
+  let selectedCoords = null;
 
-  </script>
+  // Detect User Location
+  map.locate({ setView: true, maxZoom: 18 });
+
+  map.on('locationfound', function(e) {
+    const userLatLng = e.latlng;
+
+    userMarker = L.marker(userLatLng, {
+      icon: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41]
+      })
+    }).addTo(map).bindPopup("You are here").openPopup();
+  });
+
+  map.on('locationerror', function() {
+    alert("Location access denied. Please enable GPS or manually pick a start point.");
+  });
+
+  // Let user click a destination point
+  map.on('click', function(e) {
+    if (destMarker) map.removeLayer(destMarker);
+
+    selectedCoords = e.latlng;
+
+    destMarker = L.marker(selectedCoords, {
+      icon: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41]
+      })
+    }).addTo(map).bindPopup("Destination").openPopup();
+
+    // 👉 Later: Calculate shortest path from user to destination here
+  });
+</script>
+
 
 </body>
 </html>
