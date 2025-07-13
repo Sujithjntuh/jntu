@@ -19,15 +19,15 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-  // 1️⃣ Initialize the map centered over JNTUH
+  // Initialize map centered on JNTUH
   const map = L.map('map').setView([17.4931, 78.3915], 17);
 
-  // 2️⃣ Add OpenStreetMap tiles
+  // Add OpenStreetMap tiles
   L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // 3️⃣ Load GeoJSON paths (red campus walk paths)
+  // Load GeoJSON walkable paths
   fetch('https://sujithjntuh.github.io/jntuh-campus-map/paths_in_jntuh.geojson')
     .then(res => res.json())
     .then(data => {
@@ -39,28 +39,19 @@
       }).addTo(map);
     });
 
-  // 4️⃣ Detect user + allow destination click
-  let userMarker = null;
+  // 🔵 Default Start Point Marker
+  const defaultStart = [17.4931, 78.3915];
+  const userMarker = L.marker(defaultStart, {
+    icon: L.icon({
+      iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41]
+    })
+  }).addTo(map).bindPopup("Default Start Location").openPopup();
+
+  // 🟢 Destination Marker on Click
   let destMarker = null;
   let selectedCoords = null;
-
-  map.locate({ setView: false, maxZoom: 18 });
-
-  map.on('locationfound', function(e) {
-    const userLatLng = e.latlng;
-
-    userMarker = L.marker(userLatLng, {
-      icon: L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41]
-      })
-    }).addTo(map).bindPopup("You are here").openPopup();
-  });
-
-  map.on('locationerror', function() {
-    alert("Location access denied. Please enable GPS.");
-  });
 
   map.on('click', function(e) {
     if (destMarker) map.removeLayer(destMarker);
@@ -74,6 +65,8 @@
         iconAnchor: [12, 41]
       })
     }).addTo(map).bindPopup("Destination").openPopup();
+
+    // 🚀 (Later): Call shortest path from defaultStart → selectedCoords
   });
 </script>
 
