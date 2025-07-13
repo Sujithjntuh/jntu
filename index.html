@@ -19,15 +19,30 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-  // Initialize map centered on JNTUH
-  const map = L.map('map').setView([17.4931, 78.3915], 17);
+  const map = L.map('map').setView([17.4931, 78.3915], 17); // Centered on JNTUH
 
-  // Add OpenStreetMap tiles
+  // Load base map
   L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Load GeoJSON walkable paths
+  // 🔵 Step 3: Default Start Location (Main Gate)
+  const defaultStart = [17.4931, 78.3915];
+  const userMarker = L.marker(defaultStart, {
+    icon: L.icon({
+      iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41]
+    })
+  }).addTo(map).bindPopup("Start: Main Gate").openPopup();
+
+  // 🟢 Destination Marker and Route Line
+  let destMarker = null;
+  let selectedCoords = null;
+  let routeLine = null;
+
+  // 🔗 Step 4: Build the Graph from GeoJSON
+  let graph = {};
   fetch('https://sujithjntuh.github.io/jntuh-campus-map/paths_in_jntuh.geojson')
     .then(res => res.json())
     .then(data => {
@@ -37,27 +52,112 @@
           weight: 3
         }
       }).addTo(map);
+
+      // Build graph from lines
+      data.features.forEach(feature => {
+        const coords = feature.geometry.coordinates;
+
+        for (let i = 0; i < coords.length - 1; i++) {
+          const a = coords[i];
+          const b = coords[i + 1];
+
+          const keyA = `${a[1]},${a[0]}`;
+          const keyB = `${b[1]},${b[0]}`;
+          const dist = getDistance(a[1], a[0], b[1], b[0]);
+
+          if (!graph[keyA]) graph[keyA] = {};
+          if (!graph[keyB]) graph[keyB] = {};
+
+          graph[keyA][keyB] = dist;
+          graph[keyB][keyA] = dist;
+        }
+      });
     });
 
-  // 🔵 Default Start Point Marker
-  const defaultStart = [17.4931, 78.3915];
-  const userMarker = L.marker(defaultStart, {
-    icon: L.icon({
-      iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
-      iconSize: [25, 41],
-      iconAnchor: [12, 41]
-    })
-  }).addTo(map).bindPopup("Default Start Location").openPopup();
+  // 🌐 Haversine distance
+  function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-  // 🟢 Destination Marker on Click
-  let destMarker = null;
-  let selectedCoords = null;
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
 
-  map.on('click', function(e) {
+  // 🧠 Dijkstra’s Algorithm
+  function dijkstra(start, end) {
+    const distances = {};
+    const previous = {};
+    const queue = new Set(Object.keys(graph));
+
+    for (let node of queue) {
+      distances[node] = Infinity;
+      previous[node] = null;
+    }
+
+    distances[start] = 0;
+
+    while (queue.size > 0) {
+      const current = [...queue].reduce((a, b) => distances[a] < distances[b] ? a : b);
+      if (current === end) break;
+
+      queue.delete(current);
+
+      for (let neighbor in graph[current]) {
+        const alt = distances[current] + graph[current][neighbor];
+        if (alt < distances[neighbor]) {
+          distances[neighbor] = alt;
+          previous[neighbor] = current;
+        }
+      }
+    }
+
+    const path = [];
+    let u = end;
+    while (previous[u]) {
+      path.unshift(u);
+      u = previous[u];
+    }
+
+    if (path.length) path.unshift(start);
+    return path;
+  }
+
+  // 📍 Find nearest node from latlng
+  function getNearestNode(latlng, graph) {
+    let nearest = null;
+    let minDist = Infinity;
+
+    for (let key in graph) {
+      const [lat, lng] = key.split(',').map(Number);
+      const d = getDistance(latlng[0], latlng[1], lat, lng);
+      if (d < minDist) {
+        minDist = d;
+        nearest = key;
+      }
+    }
+
+    return nearest;
+  }
+
+  // 🎯 Step 5: When user clicks to set destination
+  map.on('click', function (e) {
+    if (!graph || Object.keys(graph).length === 0) {
+      alert("Graph still loading... please wait.");
+      return;
+    }
+
     if (destMarker) map.removeLayer(destMarker);
+    if (routeLine) map.removeLayer(routeLine);
 
     selectedCoords = e.latlng;
 
+    // 🟢 Add destination marker
     destMarker = L.marker(selectedCoords, {
       icon: L.icon({
         iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
@@ -66,9 +166,31 @@
       })
     }).addTo(map).bindPopup("Destination").openPopup();
 
-    // 🚀 (Later): Call shortest path from defaultStart → selectedCoords
+    // 🔍 Find nearest graph nodes
+    const startKey = getNearestNode(defaultStart, graph);
+    const endKey = getNearestNode([selectedCoords.lat, selectedCoords.lng], graph);
+
+    // 🛣️ Find shortest path
+    const pathKeys = dijkstra(startKey, endKey);
+
+    if (pathKeys.length === 0) {
+      alert("No path found.");
+      return;
+    }
+
+    const pathCoords = pathKeys.map(key => {
+      const [lat, lng] = key.split(',').map(Number);
+      return [lat, lng];
+    });
+
+    // 🔵 Draw shortest path line
+    routeLine = L.polyline(pathCoords, {
+      color: 'blue',
+      weight: 4
+    }).addTo(map);
   });
 </script>
+
 
 
 </body>
