@@ -19,15 +19,15 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-  // 1️⃣ Initialize the map
-  const map = L.map('map').setView([17.4955, 78.3938], 17);
+  // 1️⃣ Initialize the map centered over JNTUH
+  const map = L.map('map').setView([17.4931, 78.3915], 17);
 
   // 2️⃣ Add OpenStreetMap tiles
   L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // 3️⃣ Load and style your GeoJSON paths
+  // 3️⃣ Load GeoJSON paths (red campus walk paths)
   fetch('https://sujithjntuh.github.io/jntuh-campus-map/paths_in_jntuh.geojson')
     .then(res => res.json())
     .then(data => {
@@ -39,13 +39,12 @@
       }).addTo(map);
     });
 
-  // 🔵🔘 4️⃣ User + Destination Marker Code starts here
+  // 4️⃣ Detect user + allow destination click
   let userMarker = null;
   let destMarker = null;
   let selectedCoords = null;
 
-  // Detect User Location
-  map.locate({ setView: true, maxZoom: 18 });
+  map.locate({ setView: false, maxZoom: 18 });
 
   map.on('locationfound', function(e) {
     const userLatLng = e.latlng;
@@ -60,10 +59,9 @@
   });
 
   map.on('locationerror', function() {
-    alert("Location access denied. Please enable GPS or manually pick a start point.");
+    alert("Location access denied. Please enable GPS.");
   });
 
-  // Let user click a destination point
   map.on('click', function(e) {
     if (destMarker) map.removeLayer(destMarker);
 
@@ -76,8 +74,6 @@
         iconAnchor: [12, 41]
       })
     }).addTo(map).bindPopup("Destination").openPopup();
-
-    // 👉 Later: Calculate shortest path from user to destination here
   });
 </script>
 
