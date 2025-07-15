@@ -19,49 +19,121 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+<script>
+  const map = L.map('map').setView([17.4935, 78.3918], 17);
 
-  <script>
-  const map = L.map('map').setView([17.4931, 78.3915], 17);
-
-  // Add OSM tiles
+  // Add base map
   L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Default start marker (Main Gate)
-  const defaultStart = [17.4931, 78.3915];
-  const userMarker = L.marker(defaultStart, {
-    icon: L.icon({
-      iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
-      iconSize: [25, 41],
-      iconAnchor: [12, 41]
-    })
-  }).addTo(map).bindPopup("Start: Main Gate").openPopup();
+  // Define junction points
+  const points = {
+    "Main Gate": [17.49315, 78.3915],
+    "Library Circle": [17.49485, 78.3922]
+  };
 
-  let destMarker = null;
-  let routeLine = null;
+  // Define simple graph between points
+  const graph = {
+    "17.49315,78.3915": {
+      "17.49485,78.3922": getDistance(17.49315, 78.3915, 17.49485, 78.3922)
+    },
+    "17.49485,78.3922": {
+      "17.49315,78.3915": getDistance(17.49315, 78.3915, 17.49485, 78.3922)
+    }
+  };
 
-  // On map click
-  map.on('click', function (e) {
-    const selectedCoords = e.latlng;
+  // Add markers to map
+  Object.entries(points).forEach(([label, coords]) => {
+    L.marker(coords).addTo(map).bindPopup(label);
+  });
 
-    // Remove old marker and route
-    if (destMarker) map.removeLayer(destMarker);
-    if (routeLine) map.removeLayer(routeLine);
+  // Utility to get nearest graph node from a clicked point
+  function getNearestNode(latlng, graph) {
+    let nearest = null;
+    let minDist = Infinity;
 
-    // Add destination marker
-    destMarker = L.marker(selectedCoords, {
-      icon: L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41]
-      })
-    }).addTo(map).bindPopup("Destination").openPopup();
+    for (let key in graph) {
+      const [lat, lng] = key.split(',').map(Number);
+      const d = getDistance(latlng[0], latlng[1], lat, lng);
+      if (d < minDist) {
+        minDist = d;
+        nearest = key;
+      }
+    }
+    return nearest;
+  }
 
-    // Draw straight line from defaultStart to selectedCoords
-    routeLine = L.polyline([defaultStart, [selectedCoords.lat, selectedCoords.lng]], {
+  // Dijkstra function
+  function dijkstra(start, end) {
+    const distances = {};
+    const previous = {};
+    const queue = new Set(Object.keys(graph));
+
+    for (let node of queue) {
+      distances[node] = Infinity;
+      previous[node] = null;
+    }
+
+    distances[start] = 0;
+
+    while (queue.size > 0) {
+      const current = [...queue].reduce((a, b) => distances[a] < distances[b] ? a : b);
+      if (current === end) break;
+
+      queue.delete(current);
+
+      for (let neighbor in graph[current]) {
+        const alt = distances[current] + graph[current][neighbor];
+        if (alt < distances[neighbor]) {
+          distances[neighbor] = alt;
+          previous[neighbor] = current;
+        }
+      }
+    }
+
+    const path = [];
+    let u = end;
+    while (previous[u]) {
+      path.unshift(u);
+      u = previous[u];
+    }
+    if (path.length) path.unshift(start);
+    return path;
+  }
+
+  // Haversine distance
+  function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  // Handle click to simulate route from Main Gate
+  map.on('click', function(e) {
+    const startKey = getNearestNode(points["Main Gate"], graph);
+    const endKey = getNearestNode([e.latlng.lat, e.latlng.lng], graph);
+
+    const pathKeys = dijkstra(startKey, endKey);
+
+    if (pathKeys.length === 0) {
+      alert("No route found!");
+      return;
+    }
+
+    const pathCoords = pathKeys.map(key => key.split(',').map(Number));
+
+    L.polyline(pathCoords, {
       color: 'blue',
-      weight: 4
+      weight: 5
     }).addTo(map);
   });
 </script>
