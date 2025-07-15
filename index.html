@@ -22,31 +22,28 @@
 <script>
   const map = L.map('map').setView([17.49315, 78.3915], 17);
 
-  // Base map
+  // Base layer
   L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // 📍 Start location (Default GPS-based, Main Gate)
+  // 🔘 Default starting point (Main Gate)
   const defaultStart = [17.49315, 78.3915];
-
-  // Mark start point
   const startMarker = L.marker(defaultStart, {
     icon: L.icon({
       iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
       iconSize: [25, 41],
       iconAnchor: [12, 41]
     })
-  }).addTo(map).bindPopup("Default Start").openPopup();
+  }).addTo(map).bindPopup("Start: Main Gate").openPopup();
 
-  // Define allowed junction points (nodes)
+  // 🧠 Node network (manually defined)
   const nodes = {
     "Main Gate": [17.49315, 78.3915],
     "Library": [17.49485, 78.3922],
     "Admin": [17.4942, 78.3911]
   };
 
-  // Define graph with distances
   const graph = {
     "17.49315,78.3915": {
       "17.49485,78.3922": getDistance(17.49315, 78.3915, 17.49485, 78.3922),
@@ -62,29 +59,83 @@
     }
   };
 
-  // Draw node markers
-  Object.values(nodes).forEach((coords) => {
+  // 🧷 Add red markers at all nodes
+  Object.values(nodes).forEach(coords => {
     L.circleMarker(coords, { radius: 5, color: 'red' }).addTo(map);
   });
 
-  // Haversine
-  function getDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3;
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
+  let routeLine = null;
+  let destMarker = null;
 
-    const a = Math.sin(Δφ / 2) ** 2 +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) ** 2;
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  // 🔁 On click: find route from defaultStart → through graph → to clicked point
+  map.on('click', function (e) {
+    if (routeLine) map.removeLayer(routeLine);
+    if (destMarker) map.removeLayer(destMarker);
+
+    const clickedLatLng = [e.latlng.lat, e.latlng.lng];
+
+    // 1. Get closest nodes to start and end
+    const startNode = nearestNode(defaultStart);
+    const endNode = nearestNode(clickedLatLng);
+
+    // 2. Dijkstra to find path between nodes
+    const pathKeys = dijkstra(startNode, endNode);
+    if (!pathKeys || pathKeys.length === 0) {
+      alert("No path found");
+      return;
+    }
+
+    // 3. Build full path:
+    const fullRoute = [];
+
+    // a. Add line from start to nearest node
+    fullRoute.push(defaultStart);
+    fullRoute.push(startNode.split(',').map(Number));
+
+    // b. Dijkstra path through nodes
+    pathKeys.slice(1).forEach(key => {
+      fullRoute.push(key.split(',').map(Number));
+    });
+
+    // c. Line from last node to actual clicked point
+    fullRoute.push(clickedLatLng);
+
+    // 4. Draw route
+    routeLine = L.polyline(fullRoute, {
+      color: 'blue',
+      weight: 5
+    }).addTo(map);
+
+    // 5. Mark destination
+    destMarker = L.marker(clickedLatLng, {
+      icon: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41]
+      })
+    }).addTo(map).bindPopup("Destination").openPopup();
+  });
+
+  // Nearest node finder
+  function nearestNode(latlng) {
+    let nearest = null;
+    let minDist = Infinity;
+
+    for (let key in graph) {
+      const [lat, lng] = key.split(',').map(Number);
+      const dist = getDistance(latlng[0], latlng[1], lat, lng);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = key;
+      }
+    }
+
+    return nearest;
   }
 
   // Dijkstra algorithm
   function dijkstra(start, end) {
     const distances = {}, prev = {}, queue = new Set(Object.keys(graph));
-
     Object.keys(graph).forEach(n => {
       distances[n] = Infinity;
       prev[n] = null;
@@ -114,40 +165,21 @@
     return path;
   }
 
-  // Nearest graph node
-  function nearestNode(latlng) {
-    let nearest = null, minDist = Infinity;
-    for (let key in graph) {
-      const [lat, lng] = key.split(',').map(Number);
-      const dist = getDistance(latlng[0], latlng[1], lat, lng);
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = key;
-      }
-    }
-    return nearest;
+  // Haversine distance calculator
+  function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) ** 2 +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) ** 2;
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
   }
-
-  let routeLine = null;
-
-  // On map click (user sets destination)
-  map.on('click', function (e) {
-    if (routeLine) map.removeLayer(routeLine);
-
-    const endLatLng = [e.latlng.lat, e.latlng.lng];
-
-    const startNode = nearestNode(defaultStart);
-    const endNode = nearestNode(endLatLng);
-
-    const routeKeys = dijkstra(startNode, endNode);
-    const routeCoords = routeKeys.map(k => k.split(',').map(Number));
-
-    routeLine = L.polyline(routeCoords, {
-      color: 'blue',
-      weight: 4
-    }).addTo(map);
-  });
 </script>
+
 
 
 
