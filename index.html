@@ -8,182 +8,47 @@
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body, html { margin: 0; padding: 0; height: 100%; }
+    html, body { margin: 0; height: 100%; }
     #map { width: 100%; height: 100vh; }
   </style>
 </head>
 <body>
 
-  <div id="map"></div>
+<div id="map"></div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
+  // Step 1: Initialize map centered at JNTUH Main Gate
   const map = L.map('map').setView([17.49315, 78.3915], 17);
 
-  // Base layer
-  L.tileLayer('https://{s}.tile.osm.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
+  // Step 2: Add OpenStreetMap base layer
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
   }).addTo(map);
 
-  // 🔘 Default starting point (Main Gate)
-  const defaultStart = [17.49315, 78.3915];
-  const startMarker = L.marker(defaultStart, {
-    icon: L.icon({
-      iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
-      iconSize: [25, 41],
-      iconAnchor: [12, 41]
-    })
-  }).addTo(map).bindPopup("Start: Main Gate").openPopup();
+  // Step 3: Mark Main Gate
+  const mainGate = L.marker([17.49600586408306, 78.39478645945597]).addTo(map)
+    .bindPopup("Start: Main Gate")
+    .openPopup();
 
-  // 🧠 Node network (manually defined)
-  const nodes = {
-    "Main Gate": [17.49315, 78.3915],
-    "Library": [17.49485, 78.3922],
-    "Admin": [17.4942, 78.3911]
-  };
-
-  const graph = {
-    "17.49315,78.3915": {
-      "17.49485,78.3922": getDistance(17.49315, 78.3915, 17.49485, 78.3922),
-      "17.4942,78.3911": getDistance(17.49315, 78.3915, 17.4942, 78.3911)
-    },
-    "17.49485,78.3922": {
-      "17.49315,78.3915": getDistance(17.49485, 78.3922, 17.49315, 78.3915),
-      "17.4942,78.3911": getDistance(17.49485, 78.3922, 17.4942, 78.3911)
-    },
-    "17.4942,78.3911": {
-      "17.49315,78.3915": getDistance(17.4942, 78.3911, 17.49315, 78.3915),
-      "17.49485,78.3922": getDistance(17.4942, 78.3911, 17.49485, 78.3922)
-    }
-  };
-
-  // 🧷 Add red markers at all nodes
-  Object.values(nodes).forEach(coords => {
-    L.circleMarker(coords, { radius: 5, color: 'red' }).addTo(map);
-  });
-
-  let routeLine = null;
-  let destMarker = null;
-
-  // 🔁 On click: find route from defaultStart → through graph → to clicked point
-  map.on('click', function (e) {
-    if (routeLine) map.removeLayer(routeLine);
-    if (destMarker) map.removeLayer(destMarker);
-
-    const clickedLatLng = [e.latlng.lat, e.latlng.lng];
-
-    // 1. Get closest nodes to start and end
-    const startNode = nearestNode(defaultStart);
-    const endNode = nearestNode(clickedLatLng);
-
-    // 2. Dijkstra to find path between nodes
-    const pathKeys = dijkstra(startNode, endNode);
-    if (!pathKeys || pathKeys.length === 0) {
-      alert("No path found");
-      return;
-    }
-
-    // 3. Build full path:
-    const fullRoute = [];
-
-    // a. Add line from start to nearest node
-    fullRoute.push(defaultStart);
-    fullRoute.push(startNode.split(',').map(Number));
-
-    // b. Dijkstra path through nodes
-    pathKeys.slice(1).forEach(key => {
-      fullRoute.push(key.split(',').map(Number));
-    });
-
-    // c. Line from last node to actual clicked point
-    fullRoute.push(clickedLatLng);
-
-    // 4. Draw route
-    routeLine = L.polyline(fullRoute, {
-      color: 'blue',
-      weight: 5
+  // Load and draw GeoJSON path network
+fetch("path_line_jntuh.geojson")
+  .then(res => res.json())
+  .then(data => {
+    L.geoJSON(data, {
+      style: {
+        color: 'red',
+        weight: 10,
+        opacity: 10
+      }
     }).addTo(map);
+    console.log("GeoJSON paths loaded.");
+  })
+  .catch(err => console.error("Error loading GeoJSON:", err));
 
-    // 5. Mark destination
-    destMarker = L.marker(clickedLatLng, {
-      icon: L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41]
-      })
-    }).addTo(map).bindPopup("Destination").openPopup();
-  });
-
-  // Nearest node finder
-  function nearestNode(latlng) {
-    let nearest = null;
-    let minDist = Infinity;
-
-    for (let key in graph) {
-      const [lat, lng] = key.split(',').map(Number);
-      const dist = getDistance(latlng[0], latlng[1], lat, lng);
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = key;
-      }
-    }
-
-    return nearest;
-  }
-
-  // Dijkstra algorithm
-  function dijkstra(start, end) {
-    const distances = {}, prev = {}, queue = new Set(Object.keys(graph));
-    Object.keys(graph).forEach(n => {
-      distances[n] = Infinity;
-      prev[n] = null;
-    });
-    distances[start] = 0;
-
-    while (queue.size) {
-      let curr = [...queue].reduce((a, b) => distances[a] < distances[b] ? a : b);
-      if (curr === end) break;
-      queue.delete(curr);
-
-      for (let neighbor in graph[curr]) {
-        let alt = distances[curr] + graph[curr][neighbor];
-        if (alt < distances[neighbor]) {
-          distances[neighbor] = alt;
-          prev[neighbor] = curr;
-        }
-      }
-    }
-
-    const path = [];
-    let u = end;
-    while (u) {
-      path.unshift(u);
-      u = prev[u];
-    }
-    return path;
-  }
-
-  // Haversine distance calculator
-  function getDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3;
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ / 2) ** 2 +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) ** 2;
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  }
 </script>
-
-
-
-
-
 
 </body>
 </html>
