@@ -34,7 +34,7 @@
     .openPopup();
 
   // Load and draw GeoJSON path network
-fetch("path_line_jntuh.geojson")
+fetch("paths_in_jntuh.geojson")
   .then(res => res.json())
   .then(data => {
     L.geoJSON(data, {
